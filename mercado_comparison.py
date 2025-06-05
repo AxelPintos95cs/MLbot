@@ -25,7 +25,6 @@ def obtener_url_imagen(item):
             if attr == "data-srcset":
                 url = url.split(",")[0].split(" ")[0]
             if "pixel" not in url.lower() and "blank" not in url.lower():
-                # Forzar https si no lo tiene
                 if url.startswith("http://"):
                     url = "https://" + url[len("http://"):]
                 return url
@@ -93,7 +92,7 @@ def buscar_publicaciones(consulta, max_paginas=5):
     driver.quit()
     return publicaciones
 
-def mostrar_top3_en_root(publicaciones, frame_resultados):
+def mostrar_top3_en_root(publicaciones, frame_resultados, root):
     for widget in frame_resultados.winfo_children():
         widget.destroy()
 
@@ -101,7 +100,6 @@ def mostrar_top3_en_root(publicaciones, frame_resultados):
         ttk.Label(frame_resultados, text="No se encontraron resultados.", foreground="red").pack(pady=10)
         return
 
-    # Detectar filtro para thumbnail según versión Pillow
     try:
         resample_filter = Image.Resampling.LANCZOS
     except AttributeError:
@@ -148,8 +146,10 @@ def mostrar_top3_en_root(publicaciones, frame_resultados):
         btn = ttk.Button(frame, text="Ver en MercadoLibre", command=lambda url=pub["link"]: webbrowser.open(url))
         btn.grid(row=2, column=1, sticky="w", pady=(5, 0))
 
+    root.update_idletasks()
+    root.minsize(500, root.winfo_height())
 
-def buscar_y_mostrar(entry, boton, frame_resultados):
+def buscar_y_mostrar(entry, boton, frame_resultados, root):
     producto = entry.get()
     if not producto.strip():
         messagebox.showwarning("Atención", "Por favor ingresá un nombre de producto.")
@@ -160,7 +160,7 @@ def buscar_y_mostrar(entry, boton, frame_resultados):
 
     def tarea():
         publicaciones = buscar_publicaciones(producto)
-        mostrar_top3_en_root(publicaciones, frame_resultados)
+        mostrar_top3_en_root(publicaciones, frame_resultados, root)
         boton.config(state="normal")
         entry.config(state="normal")
 
@@ -169,7 +169,7 @@ def buscar_y_mostrar(entry, boton, frame_resultados):
 def interfaz_principal():
     root = tk.Tk()
     root.title("Buscador de Ofertas - MercadoLibre")
-    root.geometry("500x600")
+    root.geometry("")
     root.resizable(False, False)
 
     style = ttk.Style()
@@ -187,10 +187,10 @@ def interfaz_principal():
     frame_resultados = ttk.Frame(main_frame)
     frame_resultados.pack(fill="both", expand=True, pady=(10, 0))
 
-    boton = ttk.Button(main_frame, text="Buscar", command=lambda: buscar_y_mostrar(entry, boton, frame_resultados))
+    boton = ttk.Button(main_frame, text="Buscar", command=lambda: buscar_y_mostrar(entry, boton, frame_resultados, root))
     boton.pack(pady=(0, 10))
 
-    root.bind('<Return>', lambda event: buscar_y_mostrar(entry, boton, frame_resultados))
+    root.bind('<Return>', lambda event: buscar_y_mostrar(entry, boton, frame_resultados, root))
 
     root.mainloop()
 
