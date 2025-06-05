@@ -14,6 +14,23 @@ import webbrowser
 import threading
 import time
 
+def obtener_url_imagen(item):
+    img_tag = item.find("img")
+    if not img_tag:
+        return ""
+
+    for attr in ["data-src", "data-lazy-src", "data-srcset", "src"]:
+        url = img_tag.get(attr)
+        if url and url.strip():
+            if attr == "data-srcset":
+                url = url.split(",")[0].split(" ")[0]
+            if "pixel" not in url.lower() and "blank" not in url.lower():
+                # Forzar https si no lo tiene
+                if url.startswith("http://"):
+                    url = "https://" + url[len("http://"):]
+                return url
+    return ""
+
 def buscar_publicaciones(consulta, max_paginas=5):
     consulta = consulta.replace(" ", "-")
     publicaciones = []
@@ -40,8 +57,17 @@ def buscar_publicaciones(consulta, max_paginas=5):
         items = soup.select("li.ui-search-layout__item")
 
         for item in items:
-            titulo_tag = item.select_one("h2.ui-search-item__title") or item.select_one("span.ui-search-item__group__element")
-            titulo = titulo_tag.text.strip() if titulo_tag else "Sin título"
+            titulo_tag = item.select_one("[class*='ui-search-item__title']")
+            if not titulo_tag:
+                titulo_tag = item.select_one("img[alt]")
+
+            if titulo_tag:
+                if titulo_tag.name == "img":
+                    titulo = titulo_tag["alt"].strip()
+                else:
+                    titulo = titulo_tag.text.strip()
+            else:
+                titulo = "Sin título"
 
             precio_tag = item.find("span", class_="andes-money-amount__fraction")
             try:
@@ -52,10 +78,7 @@ def buscar_publicaciones(consulta, max_paginas=5):
             link_tag = item.find("a", href=True)
             link = link_tag["href"] if link_tag else ""
 
-            img_url = ""
-            img_tag = item.select_one("img.ui-search-result-image__element")
-            if img_tag:
-                img_url = img_tag.get("data-src") or img_tag.get("src") or ""
+            img_url = obtener_url_imagen(item)
 
             if precio is not None and link:
                 publicaciones.append({
@@ -70,10 +93,19 @@ def buscar_publicaciones(consulta, max_paginas=5):
     driver.quit()
     return publicaciones
 
-def mostrar_top3_popup(publicaciones):
+def mostrar_top3_en_root(publicaciones, frame_resultados):
+    for widget in frame_resultados.winfo_children():
+        widget.destroy()
+
     if not publicaciones:
-        messagebox.showerror("Sin resultados", "No se encontraron publicaciones.")
+        ttk.Label(frame_resultados, text="No se encontraron resultados.", foreground="red").pack(pady=10)
         return
+
+    # Detectar filtro para thumbnail según versión Pillow
+    try:
+        resample_filter = Image.Resampling.LANCZOS
+    except AttributeError:
+        resample_filter = Image.ANTIALIAS
 
     publicaciones_ordenadas = sorted(publicaciones, key=lambda x: x["precio"])
     precios_vistos = set()
@@ -86,17 +118,9 @@ def mostrar_top3_popup(publicaciones):
         if len(top3) == 3:
             break
 
-    if not top3:
-        messagebox.showinfo("Sin resultados", "No se encontraron precios distintos.")
-        return
-
-    popup = tk.Toplevel()
-    popup.title("Top 3 Ofertas Más Baratas")
-    popup.configure(padx=10, pady=10)
-
-    for idx, pub in enumerate(top3):
-        frame = ttk.Frame(popup, padding=10, relief="ridge")
-        frame.grid(row=idx, column=0, pady=5, sticky="nsew")
+    for pub in top3:
+        frame = ttk.Frame(frame_resultados, padding=10, relief="ridge")
+        frame.pack(fill="x", pady=5)
 
         img_data = None
         if pub["img_url"]:
@@ -105,15 +129,15 @@ def mostrar_top3_popup(publicaciones):
                 if r.status_code == 200:
                     img_data = r.content
             except Exception:
-                img_data = None
+                pass
 
         if img_data:
             image = Image.open(io.BytesIO(img_data))
-            image.thumbnail((100, 100), Image.ANTIALIAS)
+            image.thumbnail((100, 100), resample_filter)
             photo = ImageTk.PhotoImage(image)
             img_label = ttk.Label(frame, image=photo)
             img_label.image = photo
-            img_label.grid(row=0, column=0, rowspan=3, padx=5)
+            img_label.grid(row=0, column=0, rowspan=3, padx=5, pady=5)
 
         title_label = ttk.Label(frame, text=pub["titulo"], wraplength=250, font=("Arial", 10, "bold"))
         title_label.grid(row=0, column=1, sticky="w")
@@ -121,19 +145,11 @@ def mostrar_top3_popup(publicaciones):
         price_label = ttk.Label(frame, text=f"Precio: ${pub['precio']}", font=("Arial", 10))
         price_label.grid(row=1, column=1, sticky="w")
 
-        def make_open_link(url):
-            return lambda: webbrowser.open(url)
-
-        btn = ttk.Button(frame, text="Ver en MercadoLibre", command=make_open_link(pub["link"]))
-        btn.grid(row=2, column=1, sticky="w")
-
-    close_btn = ttk.Button(popup, text="Cerrar", command=popup.destroy)
-    close_btn.grid(row=3, column=0, pady=(10, 0))
-
-    popup.resizable(False, False)
+        btn = ttk.Button(frame, text="Ver en MercadoLibre", command=lambda url=pub["link"]: webbrowser.open(url))
+        btn.grid(row=2, column=1, sticky="w", pady=(5, 0))
 
 
-def buscar_y_mostrar(entry, boton):
+def buscar_y_mostrar(entry, boton, frame_resultados):
     producto = entry.get()
     if not producto.strip():
         messagebox.showwarning("Atención", "Por favor ingresá un nombre de producto.")
@@ -144,7 +160,7 @@ def buscar_y_mostrar(entry, boton):
 
     def tarea():
         publicaciones = buscar_publicaciones(producto)
-        mostrar_top3_popup(publicaciones)
+        mostrar_top3_en_root(publicaciones, frame_resultados)
         boton.config(state="normal")
         entry.config(state="normal")
 
@@ -153,17 +169,28 @@ def buscar_y_mostrar(entry, boton):
 def interfaz_principal():
     root = tk.Tk()
     root.title("Buscador de Ofertas - MercadoLibre")
-    root.geometry("400x180")
+    root.geometry("500x600")
     root.resizable(False, False)
 
-    ttk.Label(root, text="Nombre del producto:", font=("Arial", 12)).pack(pady=(20, 5))
+    style = ttk.Style()
+    style.theme_use('clam')
 
-    entry = ttk.Entry(root, width=40, font=("Arial", 11))
+    main_frame = ttk.Frame(root, padding=20)
+    main_frame.pack(fill="both", expand=True)
+
+    ttk.Label(main_frame, text="Nombre del producto:", font=("Arial", 12)).pack(pady=(0, 5))
+
+    entry = ttk.Entry(main_frame, width=40, font=("Arial", 11))
     entry.pack(pady=(0, 10))
     entry.focus()
 
-    boton = ttk.Button(root, text="Buscar", command=lambda: buscar_y_mostrar(entry, boton))
+    frame_resultados = ttk.Frame(main_frame)
+    frame_resultados.pack(fill="both", expand=True, pady=(10, 0))
+
+    boton = ttk.Button(main_frame, text="Buscar", command=lambda: buscar_y_mostrar(entry, boton, frame_resultados))
     boton.pack(pady=(0, 10))
+
+    root.bind('<Return>', lambda event: buscar_y_mostrar(entry, boton, frame_resultados))
 
     root.mainloop()
 
