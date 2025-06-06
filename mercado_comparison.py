@@ -126,7 +126,16 @@ def buscar_publicaciones(consulta, max_paginas=5):
     driver.quit()
     return publicaciones
 
-# --- Interfaz ---
+def filtrar_por_palabras_clave(publicaciones, consulta):
+    palabras = consulta.lower().split()
+    filtradas = []
+    for pub in publicaciones:
+        titulo = pub["titulo"].lower()
+        if all(palabra in titulo for palabra in palabras):
+            filtradas.append(pub)
+    return filtradas
+
+
 def mostrar_top3_en_root(publicaciones, frame_resultados, root):
     for widget in frame_resultados.winfo_children():
         widget.destroy()
@@ -202,9 +211,11 @@ def buscar_y_mostrar(entry, boton, frame_resultados, root):
 
     def tarea():
         publicaciones = buscar_publicaciones(producto)
-        mostrar_top3_en_root(publicaciones, frame_resultados, root)
+        publicaciones_filtradas = filtrar_por_palabras_clave(publicaciones, producto)
+        mostrar_top3_en_root(publicaciones_filtradas, frame_resultados, root)
         boton.config(state="normal")
         entry.config(state="normal")
+
 
     threading.Thread(target=tarea).start()
 
