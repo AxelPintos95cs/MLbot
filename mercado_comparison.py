@@ -1,4 +1,3 @@
-# main.py
 import tkinter as tk
 from tkinter import ttk, messagebox
 from selenium import webdriver
@@ -109,7 +108,7 @@ def buscar_publicaciones(consulta, max_paginas=5):
             link = link_tag["href"] if link_tag else ""
             product_id = extraer_id_desde_url(link).strip()
             if not product_id:
-                continue  # ignorar ítems sin ID válido
+                continue  
 
             img_url = obtener_url_imagen(item)
 
@@ -158,8 +157,7 @@ def mostrar_top3_en_root(publicaciones, frame_resultados, root):
     favoritos_ids = {f[0] for f in obtener_favoritos()}
 
     for pub in top3:
-        estilo = "Blue.TFrame" if pub["product_id"] in favoritos_ids else "Default.TFrame"
-        frame = ttk.Frame(frame_resultados, padding=10, relief="ridge", style=estilo)
+        frame = ttk.Frame(frame_resultados, padding=10, relief="ridge")
         frame.pack(fill="x", pady=5)
 
         img_data = None
@@ -197,23 +195,39 @@ def mostrar_top3_en_root(publicaciones, frame_resultados, root):
 
         ttk.Button(frame, text="Ver en MercadoLibre", command=lambda url=pub["link"]: webbrowser.open(url)).grid(row=3, column=1, sticky="w", pady=(5, 0))
 
+        boton_frame = ttk.Frame(frame)
+        boton_frame.grid(row=3, column=1, sticky="w", pady=(5, 0))
+
+        btn_ver = ttk.Button(
+            boton_frame, 
+            text="Ver en MercadoLibre", 
+            command=lambda url=pub["link"]: webbrowser.open(url),
+            width=20
+        )
+        btn_ver.grid(row=0, column=0, padx=(0, 10))
+
         btn_text = tk.StringVar()
-        favorito_btn = ttk.Button(frame, textvariable=btn_text)
-        favorito_btn.grid(row=3, column=1, sticky="e", pady=(5, 0))
+        favorito_btn = ttk.Button(
+            boton_frame, 
+            textvariable=btn_text,
+            width=20
+        )
+        favorito_btn.grid(row=0, column=1)
 
         if pub["product_id"] in favoritos_ids:
             btn_text.set("Ya en favoritos")
             favorito_btn.state(["disabled"])
+            favorito_btn.configure(style="Favorito.TButton")
         else:
             btn_text.set("Añadir a favoritos")
-            def crear_comando(pub=pub, frame=frame, text_var=btn_text, button=favorito_btn):
+            def crear_comando(pub=pub, text_var=btn_text, button=favorito_btn):
                 def comando():
                     def tarea():
                         try:
                             agregar_a_favoritos(pub)
-                            frame.configure(style="Blue.TFrame")
                             text_var.set("Ya en favoritos")
                             button.state(["disabled"])
+                            button.configure(style="Favorito.TButton")
                         except Exception as e:
                             print("Error al agregar a favoritos:", e)
                     threading.Thread(target=tarea).start()
@@ -279,7 +293,6 @@ def ver_favoritos():
             contenido_frame = ttk.Frame(frame)
             contenido_frame.pack(fill="x")
 
-            # Imagen
             img_label = ttk.Label(contenido_frame)
             img_label.pack(side="left", padx=5)
 
@@ -295,7 +308,6 @@ def ver_favoritos():
                 except Exception as e:
                     print("Error cargando imagen:", e)
 
-            # Texto + botones
             detalles_frame = ttk.Frame(contenido_frame)
             detalles_frame.pack(side="left", fill="x", expand=True)
 
@@ -314,24 +326,44 @@ def interfaz_principal():
     root.title("Buscador de Ofertas - MercadoLibre")
     root.geometry("500x150")
     root.resizable(False, False)
+
     style = ttk.Style()
     style.theme_use('clam')
-    style.configure("Blue.TFrame", background="#d0e7ff")
-    style.configure("Default.TFrame", background="white")
+
+    style.configure("Favorito.TButton",
+                    foreground="black",
+                    background="#cce6ff",
+                    borderwidth=1,
+                    focusthickness=3,
+                    focuscolor="none",
+                    relief="solid")
+
+    style.map("Favorito.TButton",
+              background=[('disabled', '#cce6ff'), ('active', '#b3d9ff')],
+              foreground=[('disabled', 'black'), ('active', 'black')],
+              relief=[('disabled', 'solid')],
+              bordercolor=[('disabled', '#999')])
+
     main_frame = ttk.Frame(root, padding=20)
     main_frame.pack(fill="both", expand=True)
+
     ttk.Label(main_frame, text="Nombre del producto:", font=("Arial", 12)).pack(pady=(0, 5))
     entry = ttk.Entry(main_frame, width=40, font=("Arial", 11))
     entry.pack(pady=(0, 10))
     entry.focus()
+
     button_frame = ttk.Frame(main_frame)
     button_frame.pack()
+
     boton_buscar = ttk.Button(button_frame, text="Buscar", command=lambda: buscar_y_mostrar(entry, boton_buscar, frame_resultados, root))
     boton_buscar.pack(side="left", padx=5)
+
     boton_favoritos = ttk.Button(button_frame, text="Ver favoritos", command=ver_favoritos)
     boton_favoritos.pack(side="left", padx=5)
+
     frame_resultados = ttk.Frame(main_frame)
     frame_resultados.pack(fill="both", expand=True, pady=(10, 0))
+
     root.bind('<Return>', lambda event: buscar_y_mostrar(entry, boton_buscar, frame_resultados, root))
     root.mainloop()
 
