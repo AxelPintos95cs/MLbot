@@ -10,7 +10,9 @@ def init_favoritos_db():
         CREATE TABLE IF NOT EXISTS favoritos (
             product_id TEXT PRIMARY KEY,
             titulo TEXT,
-            precio INTEGER
+            precio INTEGER,
+            link TEXT,
+            img_url TEXT
         )
     ''')
     conn.commit()
@@ -22,9 +24,15 @@ def agregar_a_favoritos(pub):
     c = conn.cursor()
     try:
         c.execute("""
-            INSERT INTO favoritos (product_id, titulo, precio)
-            VALUES (?, ?, ?)
-        """, (product_id, pub["titulo"], pub["precio"]))
+            INSERT INTO favoritos (product_id, titulo, precio, link, img_url)
+            VALUES (?, ?, ?, ?, ?)
+        """, (
+            product_id,
+            pub["titulo"],
+            pub["precio"],
+            pub["link"],
+            pub["img_url"]
+        ))
         conn.commit()
     except sqlite3.IntegrityError:
         print("El producto ya está en favoritos, no se agrega de nuevo.")
@@ -34,7 +42,7 @@ def agregar_a_favoritos(pub):
 def obtener_favoritos():
     conn = sqlite3.connect(FAV_DB)
     c = conn.cursor()
-    c.execute("SELECT product_id, titulo, precio FROM favoritos ORDER BY titulo")
+    c.execute("SELECT product_id, titulo, precio, link, img_url FROM favoritos ORDER BY titulo")
     resultados = c.fetchall()
     conn.close()
     return resultados

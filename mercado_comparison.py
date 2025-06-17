@@ -240,31 +240,72 @@ def ver_favoritos():
     if not favoritos:
         messagebox.showinfo("Favoritos", "No tenés productos en favoritos todavía.")
         return
+
     ventana = tk.Toplevel()
     ventana.title("Favoritos")
-    ventana.geometry("600x400")
+    ventana.geometry("600x500")
+
     canvas = tk.Canvas(ventana)
     scrollbar = ttk.Scrollbar(ventana, orient="vertical", command=canvas.yview)
     contenedor = ttk.Frame(canvas)
+
     contenedor.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
     canvas.create_window((0, 0), window=contenedor, anchor="nw")
     canvas.configure(yscrollcommand=scrollbar.set)
     canvas.pack(side="left", fill="both", expand=True)
     scrollbar.pack(side="right", fill="y")
+
+    try:
+        resample_filter = Image.Resampling.LANCZOS
+    except AttributeError:
+        resample_filter = Image.ANTIALIAS
+
     def actualizar_favoritos():
         for widget in contenedor.winfo_children():
             widget.destroy()
+
         nuevos = obtener_favoritos()
         if not nuevos:
             messagebox.showinfo("Favoritos", "No tenés productos en favoritos.")
             ventana.destroy()
             return
+
         for fav in nuevos:
+            product_id, titulo, precio, link, img_url = fav
+
             frame = ttk.Frame(contenedor, padding=5, relief="groove")
             frame.pack(fill="x", pady=5)
-            ttk.Label(frame, text=f"{fav[1]} - ${fav[2]}", wraplength=450).pack(side="left", padx=5)
-            ttk.Button(frame, text="Eliminar", command=lambda pid=fav[0]: (eliminar_favorito(pid), actualizar_favoritos())).pack(side="right")
+
+            contenido_frame = ttk.Frame(frame)
+            contenido_frame.pack(fill="x")
+
+            # Imagen
+            img_label = ttk.Label(contenido_frame)
+            img_label.pack(side="left", padx=5)
+
+            if img_url:
+                try:
+                    r = requests.get(img_url, headers={"User-Agent": "Mozilla/5.0"}, timeout=5)
+                    if r.status_code == 200:
+                        img = Image.open(io.BytesIO(r.content))
+                        img.thumbnail((100, 100), resample_filter)
+                        photo = ImageTk.PhotoImage(img)
+                        img_label.configure(image=photo)
+                        img_label.image = photo
+                except Exception as e:
+                    print("Error cargando imagen:", e)
+
+            # Texto + botones
+            detalles_frame = ttk.Frame(contenido_frame)
+            detalles_frame.pack(side="left", fill="x", expand=True)
+
+            ttk.Label(detalles_frame, text=titulo, wraplength=400, font=("Arial", 10, "bold")).pack(anchor="w")
+            ttk.Label(detalles_frame, text=f"Precio: ${precio}", font=("Arial", 10)).pack(anchor="w")
+            ttk.Button(detalles_frame, text="Ver en MercadoLibre", command=lambda url=link: webbrowser.open(url)).pack(anchor="w", pady=(2, 4))
+            ttk.Button(detalles_frame, text="Eliminar", command=lambda pid=product_id: (eliminar_favorito(pid), actualizar_favoritos())).pack(anchor="w")
+
     actualizar_favoritos()
+
 
 def interfaz_principal():
     init_db()
