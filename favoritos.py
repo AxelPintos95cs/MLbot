@@ -1,3 +1,4 @@
+# favoritos.py
 import sqlite3
 
 FAV_DB = "favoritos.db"
@@ -17,7 +18,6 @@ def init_favoritos_db():
 
 def agregar_a_favoritos(pub):
     product_id = pub["product_id"].strip()
-    print("AGREGANDO A FAVORITOS:", product_id, pub["titulo"], pub["precio"])
     conn = sqlite3.connect(FAV_DB, timeout=10)
     c = conn.cursor()
     try:

@@ -1,3 +1,4 @@
+# main.py
 import tkinter as tk
 from tkinter import ttk, messagebox
 from selenium import webdriver
@@ -19,7 +20,6 @@ from favoritos import init_favoritos_db, agregar_a_favoritos, obtener_favoritos,
 
 DB_NAME = "precios.db"
 
-# --- Base de datos ---
 def init_db():
     conn = sqlite3.connect(DB_NAME)
     c = conn.cursor()
@@ -55,7 +55,10 @@ def guardar_precio(product_id, titulo, precio):
 
     return row[0] if row else None
 
-# --- Scraper ---
+def extraer_id_desde_url(url):
+    match = re.search(r"(ML[A-Z]?\d{9,})", url)
+    return match.group(1) if match else ""
+
 def obtener_url_imagen(item):
     img_tag = item.find("img")
     if not img_tag:
@@ -69,21 +72,13 @@ def obtener_url_imagen(item):
                 return url.replace("http://", "https://")
     return ""
 
-def extraer_id_desde_url(url):
-    match = re.search(r"(MLA\d+)", url)
-    if match:
-        return match.group(1)
-    return ""
-
 def buscar_publicaciones(consulta, max_paginas=5):
     consulta = consulta.replace(" ", "-")
     publicaciones = []
-
     options = Options()
     options.add_argument("--headless=new")
     options.add_argument("--window-size=1920,1080")
     options.add_argument("user-agent=Mozilla/5.0")
-
     driver = webdriver.Chrome(options=options)
 
     for pagina in range(1, max_paginas + 1):
@@ -114,7 +109,7 @@ def buscar_publicaciones(consulta, max_paginas=5):
             link = link_tag["href"] if link_tag else ""
             product_id = extraer_id_desde_url(link).strip()
             if not product_id:
-                product_id = link  # fallback para ID único cuando no hay MLAxxxx
+                continue  # ignorar ítems sin ID válido
 
             img_url = obtener_url_imagen(item)
 
@@ -197,6 +192,7 @@ def mostrar_top3_en_root(publicaciones, frame_resultados, root):
                 comparacion = "➖ Igual que antes"
         else:
             comparacion = "🆕 Nuevo"
+
         ttk.Label(frame, text=comparacion, font=("Arial", 9, "italic"), foreground="gray").grid(row=2, column=1, sticky="w")
 
         ttk.Button(frame, text="Ver en MercadoLibre", command=lambda url=pub["link"]: webbrowser.open(url)).grid(row=3, column=1, sticky="w", pady=(5, 0))
@@ -210,7 +206,6 @@ def mostrar_top3_en_root(publicaciones, frame_resultados, root):
             favorito_btn.state(["disabled"])
         else:
             btn_text.set("Añadir a favoritos")
-
             def crear_comando(pub=pub, frame=frame, text_var=btn_text, button=favorito_btn):
                 def comando():
                     def tarea():
@@ -223,7 +218,6 @@ def mostrar_top3_en_root(publicaciones, frame_resultados, root):
                             print("Error al agregar a favoritos:", e)
                     threading.Thread(target=tarea).start()
                 return comando
-
             favorito_btn.config(command=crear_comando())
 
 def buscar_y_mostrar(entry, boton, frame_resultados, root):
@@ -233,14 +227,12 @@ def buscar_y_mostrar(entry, boton, frame_resultados, root):
         return
     boton.config(state="disabled")
     entry.config(state="disabled")
-
     def tarea():
         publicaciones = buscar_publicaciones(producto)
         publicaciones_filtradas = filtrar_por_palabras_clave(publicaciones, producto)
         mostrar_top3_en_root(publicaciones_filtradas, frame_resultados, root)
         boton.config(state="normal")
         entry.config(state="normal")
-
     threading.Thread(target=tarea).start()
 
 def ver_favoritos():
@@ -248,28 +240,17 @@ def ver_favoritos():
     if not favoritos:
         messagebox.showinfo("Favoritos", "No tenés productos en favoritos todavía.")
         return
-
     ventana = tk.Toplevel()
     ventana.title("Favoritos")
     ventana.geometry("600x400")
-
     canvas = tk.Canvas(ventana)
     scrollbar = ttk.Scrollbar(ventana, orient="vertical", command=canvas.yview)
     contenedor = ttk.Frame(canvas)
-
-    contenedor.bind(
-        "<Configure>",
-        lambda e: canvas.configure(
-            scrollregion=canvas.bbox("all")
-        )
-    )
-
+    contenedor.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
     canvas.create_window((0, 0), window=contenedor, anchor="nw")
     canvas.configure(yscrollcommand=scrollbar.set)
-
     canvas.pack(side="left", fill="both", expand=True)
     scrollbar.pack(side="right", fill="y")
-
     def actualizar_favoritos():
         for widget in contenedor.winfo_children():
             widget.destroy()
@@ -283,43 +264,33 @@ def ver_favoritos():
             frame.pack(fill="x", pady=5)
             ttk.Label(frame, text=f"{fav[1]} - ${fav[2]}", wraplength=450).pack(side="left", padx=5)
             ttk.Button(frame, text="Eliminar", command=lambda pid=fav[0]: (eliminar_favorito(pid), actualizar_favoritos())).pack(side="right")
-
     actualizar_favoritos()
 
 def interfaz_principal():
     init_db()
     init_favoritos_db()
-
     root = tk.Tk()
     root.title("Buscador de Ofertas - MercadoLibre")
     root.geometry("500x150")
     root.resizable(False, False)
-
     style = ttk.Style()
     style.theme_use('clam')
     style.configure("Blue.TFrame", background="#d0e7ff")
     style.configure("Default.TFrame", background="white")
-
     main_frame = ttk.Frame(root, padding=20)
     main_frame.pack(fill="both", expand=True)
-
     ttk.Label(main_frame, text="Nombre del producto:", font=("Arial", 12)).pack(pady=(0, 5))
     entry = ttk.Entry(main_frame, width=40, font=("Arial", 11))
     entry.pack(pady=(0, 10))
     entry.focus()
-
     button_frame = ttk.Frame(main_frame)
     button_frame.pack()
-
     boton_buscar = ttk.Button(button_frame, text="Buscar", command=lambda: buscar_y_mostrar(entry, boton_buscar, frame_resultados, root))
     boton_buscar.pack(side="left", padx=5)
-
     boton_favoritos = ttk.Button(button_frame, text="Ver favoritos", command=ver_favoritos)
     boton_favoritos.pack(side="left", padx=5)
-
     frame_resultados = ttk.Frame(main_frame)
     frame_resultados.pack(fill="both", expand=True, pady=(10, 0))
-
     root.bind('<Return>', lambda event: buscar_y_mostrar(entry, boton_buscar, frame_resultados, root))
     root.mainloop()
 
