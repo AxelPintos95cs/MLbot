@@ -13,7 +13,9 @@ import webbrowser
 import threading
 import time
 import sqlite3
+import re
 from datetime import datetime
+from favoritos import init_favoritos_db, agregar_a_favoritos, obtener_favoritos, eliminar_favorito
 
 DB_NAME = "precios.db"
 
@@ -68,10 +70,9 @@ def obtener_url_imagen(item):
     return ""
 
 def extraer_id_desde_url(url):
-    partes = url.split("-")
-    for parte in partes:
-        if parte.startswith("MLA"):
-            return parte.split("#")[0]
+    match = re.search(r"(MLA\d+)", url)
+    if match:
+        return match.group(1)
     return ""
 
 def buscar_publicaciones(consulta, max_paginas=5):
@@ -111,7 +112,10 @@ def buscar_publicaciones(consulta, max_paginas=5):
 
             link_tag = item.find("a", href=True)
             link = link_tag["href"] if link_tag else ""
-            product_id = extraer_id_desde_url(link)
+            product_id = extraer_id_desde_url(link).strip()
+            if not product_id:
+                product_id = link  # fallback para ID único cuando no hay MLAxxxx
+
             img_url = obtener_url_imagen(item)
 
             if precio is not None and link:
@@ -128,13 +132,7 @@ def buscar_publicaciones(consulta, max_paginas=5):
 
 def filtrar_por_palabras_clave(publicaciones, consulta):
     palabras = consulta.lower().split()
-    filtradas = []
-    for pub in publicaciones:
-        titulo = pub["titulo"].lower()
-        if all(palabra in titulo for palabra in palabras):
-            filtradas.append(pub)
-    return filtradas
-
+    return [pub for pub in publicaciones if all(p in pub["titulo"].lower() for p in palabras)]
 
 def mostrar_top3_en_root(publicaciones, frame_resultados, root):
     for widget in frame_resultados.winfo_children():
@@ -145,7 +143,7 @@ def mostrar_top3_en_root(publicaciones, frame_resultados, root):
         root.geometry("500x150")
         return
 
-    root.geometry("500x600")
+    root.geometry("500x650")
 
     try:
         resample_filter = Image.Resampling.LANCZOS
@@ -162,11 +160,13 @@ def mostrar_top3_en_root(publicaciones, frame_resultados, root):
         if len(top3) == 3:
             break
 
+    favoritos_ids = {f[0] for f in obtener_favoritos()}
+
     for pub in top3:
-        frame = ttk.Frame(frame_resultados, padding=10, relief="ridge")
+        estilo = "Blue.TFrame" if pub["product_id"] in favoritos_ids else "Default.TFrame"
+        frame = ttk.Frame(frame_resultados, padding=10, relief="ridge", style=estilo)
         frame.pack(fill="x", pady=5)
 
-        # Imagen
         img_data = None
         if pub["img_url"]:
             try:
@@ -184,12 +184,10 @@ def mostrar_top3_en_root(publicaciones, frame_resultados, root):
             img_label.image = photo
             img_label.grid(row=0, column=0, rowspan=4, padx=5, pady=5)
 
-        # Título y precio
         ttk.Label(frame, text=pub["titulo"], wraplength=250, font=("Arial", 10, "bold")).grid(row=0, column=1, sticky="w")
         ttk.Label(frame, text=f"Precio actual: ${pub['precio']}", font=("Arial", 10)).grid(row=1, column=1, sticky="w")
 
         precio_anterior = guardar_precio(pub["product_id"], pub["titulo"], pub["precio"])
-        comparacion = "🆕 Nuevo"
         if precio_anterior is not None:
             if pub['precio'] < precio_anterior:
                 comparacion = f"🔻 Bajó (Antes: ${precio_anterior})"
@@ -197,9 +195,36 @@ def mostrar_top3_en_root(publicaciones, frame_resultados, root):
                 comparacion = f"🔺 Subió (Antes: ${precio_anterior})"
             else:
                 comparacion = "➖ Igual que antes"
+        else:
+            comparacion = "🆕 Nuevo"
         ttk.Label(frame, text=comparacion, font=("Arial", 9, "italic"), foreground="gray").grid(row=2, column=1, sticky="w")
 
         ttk.Button(frame, text="Ver en MercadoLibre", command=lambda url=pub["link"]: webbrowser.open(url)).grid(row=3, column=1, sticky="w", pady=(5, 0))
+
+        btn_text = tk.StringVar()
+        favorito_btn = ttk.Button(frame, textvariable=btn_text)
+        favorito_btn.grid(row=3, column=1, sticky="e", pady=(5, 0))
+
+        if pub["product_id"] in favoritos_ids:
+            btn_text.set("Ya en favoritos")
+            favorito_btn.state(["disabled"])
+        else:
+            btn_text.set("Añadir a favoritos")
+
+            def crear_comando(pub=pub, frame=frame, text_var=btn_text, button=favorito_btn):
+                def comando():
+                    def tarea():
+                        try:
+                            agregar_a_favoritos(pub)
+                            frame.configure(style="Blue.TFrame")
+                            text_var.set("Ya en favoritos")
+                            button.state(["disabled"])
+                        except Exception as e:
+                            print("Error al agregar a favoritos:", e)
+                    threading.Thread(target=tarea).start()
+                return comando
+
+            favorito_btn.config(command=crear_comando())
 
 def buscar_y_mostrar(entry, boton, frame_resultados, root):
     producto = entry.get().strip()
@@ -216,11 +241,55 @@ def buscar_y_mostrar(entry, boton, frame_resultados, root):
         boton.config(state="normal")
         entry.config(state="normal")
 
-
     threading.Thread(target=tarea).start()
+
+def ver_favoritos():
+    favoritos = obtener_favoritos()
+    if not favoritos:
+        messagebox.showinfo("Favoritos", "No tenés productos en favoritos todavía.")
+        return
+
+    ventana = tk.Toplevel()
+    ventana.title("Favoritos")
+    ventana.geometry("600x400")
+
+    canvas = tk.Canvas(ventana)
+    scrollbar = ttk.Scrollbar(ventana, orient="vertical", command=canvas.yview)
+    contenedor = ttk.Frame(canvas)
+
+    contenedor.bind(
+        "<Configure>",
+        lambda e: canvas.configure(
+            scrollregion=canvas.bbox("all")
+        )
+    )
+
+    canvas.create_window((0, 0), window=contenedor, anchor="nw")
+    canvas.configure(yscrollcommand=scrollbar.set)
+
+    canvas.pack(side="left", fill="both", expand=True)
+    scrollbar.pack(side="right", fill="y")
+
+    def actualizar_favoritos():
+        for widget in contenedor.winfo_children():
+            widget.destroy()
+        nuevos = obtener_favoritos()
+        if not nuevos:
+            messagebox.showinfo("Favoritos", "No tenés productos en favoritos.")
+            ventana.destroy()
+            return
+        for fav in nuevos:
+            frame = ttk.Frame(contenedor, padding=5, relief="groove")
+            frame.pack(fill="x", pady=5)
+            ttk.Label(frame, text=f"{fav[1]} - ${fav[2]}", wraplength=450).pack(side="left", padx=5)
+            ttk.Button(frame, text="Eliminar", command=lambda pid=fav[0]: (eliminar_favorito(pid), actualizar_favoritos())).pack(side="right")
+
+    actualizar_favoritos()
 
 def interfaz_principal():
     init_db()
+    init_favoritos_db()
+
     root = tk.Tk()
     root.title("Buscador de Ofertas - MercadoLibre")
     root.geometry("500x150")
@@ -228,6 +297,8 @@ def interfaz_principal():
 
     style = ttk.Style()
     style.theme_use('clam')
+    style.configure("Blue.TFrame", background="#d0e7ff")
+    style.configure("Default.TFrame", background="white")
 
     main_frame = ttk.Frame(root, padding=20)
     main_frame.pack(fill="both", expand=True)
@@ -237,13 +308,19 @@ def interfaz_principal():
     entry.pack(pady=(0, 10))
     entry.focus()
 
+    button_frame = ttk.Frame(main_frame)
+    button_frame.pack()
+
+    boton_buscar = ttk.Button(button_frame, text="Buscar", command=lambda: buscar_y_mostrar(entry, boton_buscar, frame_resultados, root))
+    boton_buscar.pack(side="left", padx=5)
+
+    boton_favoritos = ttk.Button(button_frame, text="Ver favoritos", command=ver_favoritos)
+    boton_favoritos.pack(side="left", padx=5)
+
     frame_resultados = ttk.Frame(main_frame)
     frame_resultados.pack(fill="both", expand=True, pady=(10, 0))
 
-    boton = ttk.Button(main_frame, text="Buscar", command=lambda: buscar_y_mostrar(entry, boton, frame_resultados, root))
-    boton.pack(pady=(0, 10))
-
-    root.bind('<Return>', lambda event: buscar_y_mostrar(entry, boton, frame_resultados, root))
+    root.bind('<Return>', lambda event: buscar_y_mostrar(entry, boton_buscar, frame_resultados, root))
     root.mainloop()
 
 if __name__ == "__main__":
