@@ -1,5 +1,6 @@
-import tkinter as tk
-from tkinter import ttk, messagebox
+import ttkbootstrap as tb 
+from ttkbootstrap.constants import *
+from tkinter import messagebox
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
@@ -133,7 +134,7 @@ def mostrar_top3_en_root(publicaciones, frame_resultados, root):
         widget.destroy()
 
     if not publicaciones:
-        ttk.Label(frame_resultados, text="No se encontraron resultados.", foreground="red").pack(pady=10)
+        tb.Label(frame_resultados, text="No se encontraron resultados.", foreground="red").pack(pady=10)
         root.geometry("500x150")
         return
 
@@ -157,8 +158,11 @@ def mostrar_top3_en_root(publicaciones, frame_resultados, root):
     favoritos_ids = {f[0] for f in obtener_favoritos()}
 
     for pub in top3:
-        frame = ttk.Frame(frame_resultados, padding=10, relief="groove", style="Publicacion.TFrame")
+        frame = tb.Frame(frame_resultados, padding=10, bootstyle="light")
+        frame.configure(style="Custom.TFrame")
         frame.pack(fill="x", pady=6)
+        frame["borderwidth"] = 1
+        frame["relief"] = "solid"
 
         img_data = None
         if pub["img_url"]:
@@ -173,12 +177,12 @@ def mostrar_top3_en_root(publicaciones, frame_resultados, root):
             image = Image.open(io.BytesIO(img_data))
             image.thumbnail((100, 100), resample_filter)
             photo = ImageTk.PhotoImage(image)
-            img_label = ttk.Label(frame, image=photo)
+            img_label = tb.Label(frame, image=photo)
             img_label.image = photo
             img_label.grid(row=0, column=0, rowspan=4, padx=5, pady=5)
 
-        ttk.Label(frame, text=pub["titulo"], wraplength=250, font=("Segoe UI", 10, "bold")).grid(row=0, column=1, sticky="w")
-        ttk.Label(frame, text=f"Precio actual: ${pub['precio']}", font=("Segoe UI", 10)).grid(row=1, column=1, sticky="w")
+        tb.Label(frame, text=pub["titulo"], wraplength=250, font=("Segoe UI", 10, "bold")).grid(row=0, column=1, sticky="w")
+        tb.Label(frame, text=f"Precio actual: ${pub['precio']}", font=("Segoe UI", 10)).grid(row=1, column=1, sticky="w")
 
         info = guardar_precio(pub["product_id"], pub["titulo"], pub["precio"])
         if info is not None:
@@ -189,24 +193,23 @@ def mostrar_top3_en_root(publicaciones, frame_resultados, root):
                 comparacion = f"🔺 Subió (Antes: ${precio_anterior})"
             else:
                 comparacion = "➖ Igual que antes"
-            ttk.Label(frame, text=f"{comparacion}\nÚltima actualización: {fecha[:10]}", font=("Segoe UI", 9, "italic"), foreground="gray").grid(row=2, column=1, sticky="w")
+            tb.Label(frame, text=f"{comparacion}\nÚltima actualización: {fecha[:10]}", font=("Segoe UI", 9, "italic"), foreground="gray").grid(row=2, column=1, sticky="w")
         else:
-            ttk.Label(frame, text="🆕 Nuevo", font=("Segoe UI", 9, "italic"), foreground="gray").grid(row=2, column=1, sticky="w")
+            tb.Label(frame, text="🆕 Nuevo", font=("Segoe UI", 9, "italic"), foreground="gray").grid(row=2, column=1, sticky="w")
 
-        boton_frame = ttk.Frame(frame)
+        boton_frame = tb.Frame(frame)
         boton_frame.grid(row=3, column=1, sticky="w", pady=(5, 0))
 
-        btn_ver = ttk.Button(boton_frame, text="Ver en MercadoLibre", command=lambda url=pub["link"]: webbrowser.open(url), width=20)
+        btn_ver = tb.Button(boton_frame, text="Ver en MercadoLibre", command=lambda url=pub["link"]: webbrowser.open(url), width=20, bootstyle="warning")
         btn_ver.grid(row=0, column=0, padx=(0, 10))
 
-        btn_text = tk.StringVar()
-        favorito_btn = ttk.Button(boton_frame, textvariable=btn_text, width=20)
+        btn_text = tb.StringVar()
+        favorito_btn = tb.Button(boton_frame, textvariable=btn_text, width=20, bootstyle="success")
         favorito_btn.grid(row=0, column=1)
 
         if pub["product_id"] in favoritos_ids:
             btn_text.set("Ya en favoritos")
             favorito_btn.state(["disabled"])
-            favorito_btn.configure(style="Favorito.TButton")
         else:
             btn_text.set("Añadir a favoritos")
             def crear_comando(pub=pub, text_var=btn_text, button=favorito_btn):
@@ -216,12 +219,82 @@ def mostrar_top3_en_root(publicaciones, frame_resultados, root):
                             agregar_a_favoritos(pub)
                             text_var.set("Ya en favoritos")
                             button.state(["disabled"])
-                            button.configure(style="Favorito.TButton")
                         except Exception as e:
                             print("Error al agregar a favoritos:", e)
                     threading.Thread(target=tarea).start()
                 return comando
             favorito_btn.config(command=crear_comando())
+
+def ver_favoritos():
+    favoritos = obtener_favoritos()
+    if not favoritos:
+        messagebox.showinfo("Favoritos", "No hay productos en la lista de favoritos.")
+        return
+
+    ventana = tb.Toplevel()
+    ventana.title("Tus favoritos")
+    ventana.geometry("525x450")
+    ventana.resizable(False, False)
+
+    contenedor = tb.Frame(ventana)
+    contenedor.pack(fill="both", expand=True)
+
+    canvas = tb.Canvas(contenedor, borderwidth=0)
+    scrollbar = tb.Scrollbar(contenedor, orient="vertical", command=canvas.yview)
+    canvas.configure(yscrollcommand=scrollbar.set)
+
+    scrollbar.pack(side="right", fill="y")
+    canvas.pack(side="left", fill="both", expand=True)
+
+    contenido = tb.Frame(canvas)
+    canvas.create_window((0, 0), window=contenido, anchor="nw")
+
+    def ajustar_scroll_region(event=None):
+        canvas.configure(scrollregion=canvas.bbox("all"))
+        altura_contenido = contenido.winfo_reqheight()
+        if altura_contenido > 680:
+            scrollbar.pack(side="right", fill="y")
+            canvas.bind_all("<MouseWheel>", _on_mousewheel)
+        else:
+            scrollbar.pack_forget()
+            canvas.unbind_all("<MouseWheel>")
+
+    def _on_mousewheel(event):
+        canvas.yview_scroll(int(-1*(event.delta / 120)), "units")
+
+    contenido.bind("<Configure>", ajustar_scroll_region)
+
+    for product_id, titulo, precio, link, img_url in favoritos:
+        card = tb.Frame(contenido, padding=10, bootstyle="light")
+        card.configure(style="Custom.TFrame")
+        card.pack(fill="x", pady=6)
+        card["borderwidth"] = 1
+        card["relief"] = "solid"
+
+        try:
+            image_data = requests.get(img_url, timeout=5).content
+            image = Image.open(io.BytesIO(image_data))
+            image.thumbnail((100, 100))
+            photo = ImageTk.PhotoImage(image)
+            label = tb.Label(card, image=photo)
+            label.image = photo
+            label.grid(row=0, column=0, rowspan=3, padx=5, pady=5)
+        except Exception:
+            pass
+
+        tb.Label(card, text=titulo, font=("Segoe UI", 10, "bold"), wraplength=400).grid(row=0, column=1, sticky="w")
+        tb.Label(card, text=f"Precio: ${precio}", font=("Segoe UI", 10)).grid(row=1, column=1, sticky="w")
+
+        btn_frame = tb.Frame(card)
+        btn_frame.grid(row=2, column=1, sticky="w", pady=5)
+
+        tb.Button(btn_frame, text="Ver en MercadoLibre", command=lambda url=link: webbrowser.open(url), bootstyle="warning").pack(side="left", padx=(0, 10))
+        tb.Button(btn_frame, text="Eliminar", command=lambda pid=product_id, c=card: eliminar_fav(pid, c), bootstyle="danger").pack(side="left")
+
+    def eliminar_fav(pid, frame_card):
+        eliminar_favorito(pid)
+        frame_card.destroy()
+        ventana.after(100, ajustar_scroll_region)  # Reajustar scroll después de eliminar
 
 def buscar_y_mostrar(entry, boton, frame_resultados, root):
     producto = entry.get().strip()
@@ -238,132 +311,33 @@ def buscar_y_mostrar(entry, boton, frame_resultados, root):
         entry.config(state="normal")
     threading.Thread(target=tarea).start()
 
-def ver_favoritos():
-    favoritos = obtener_favoritos()
-    if not favoritos:
-        messagebox.showinfo("Favoritos", "No tenés productos en favoritos.")
-        return
-
-    ventana = tk.Toplevel()
-    ventana.title("Favoritos")
-    ventana.geometry("520x500")
-    ventana.resizable(False, True)
-
-    contenedor_canvas = ttk.Frame(ventana)
-    contenedor_canvas.pack(fill="both", expand=True)
-
-    canvas = tk.Canvas(contenedor_canvas, width=520)
-    scrollbar = ttk.Scrollbar(contenedor_canvas, orient="vertical", command=canvas.yview)
-    canvas.configure(yscrollcommand=scrollbar.set)
-
-    scrollbar.pack(side="right", fill="y")
-    canvas.pack(side="left", fill="both", expand=True)
-
-    marco_scroll = ttk.Frame(canvas)
-    canvas.create_window((0, 0), window=marco_scroll, anchor="nw")
-
-    def on_mousewheel(event):
-        canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
-
-    marco_scroll.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
-    canvas.bind_all("<MouseWheel>", on_mousewheel)
-
-    try:
-        resample_filter = Image.Resampling.LANCZOS
-    except AttributeError:
-        resample_filter = Image.ANTIALIAS
-
-    def actualizar_favoritos():
-        for widget in marco_scroll.winfo_children():
-            widget.destroy()
-
-        nuevos = obtener_favoritos()
-        if not nuevos:
-            messagebox.showinfo("Favoritos", "No tenés productos en favoritos.")
-            ventana.destroy()
-            return
-
-        for fav in nuevos:
-            product_id, titulo, precio, link, img_url = fav
-
-            frame = ttk.Frame(marco_scroll, padding=5, relief="groove")
-            frame.pack(fill="x", pady=5)
-
-            contenido_frame = ttk.Frame(frame)
-            contenido_frame.pack(fill="x")
-
-            img_label = ttk.Label(contenido_frame)
-            img_label.pack(side="left", padx=5)
-
-            if img_url:
-                try:
-                    r = requests.get(img_url, headers={"User-Agent": "Mozilla/5.0"}, timeout=5)
-                    if r.status_code == 200:
-                        img = Image.open(io.BytesIO(r.content))
-                        img.thumbnail((100, 100), resample_filter)
-                        photo = ImageTk.PhotoImage(img)
-                        img_label.configure(image=photo)
-                        img_label.image = photo
-                except Exception as e:
-                    print("Error cargando imagen:", e)
-
-            detalles_frame = ttk.Frame(contenido_frame)
-            detalles_frame.pack(side="left", fill="x", expand=True)
-
-            ttk.Label(detalles_frame, text=titulo, wraplength=370, font=("Arial", 10, "bold")).pack(anchor="w")
-            ttk.Label(detalles_frame, text=f"Precio: ${precio}", font=("Arial", 10)).pack(anchor="w")
-
-            botones_frame = ttk.Frame(detalles_frame)
-            botones_frame.pack(anchor="w", pady=(4, 0))
-
-            ttk.Button(botones_frame, text="Ver en MercadoLibre", command=lambda url=link: webbrowser.open(url)).pack(side="left", padx=(0, 8))
-            ttk.Button(botones_frame, text="Eliminar", command=lambda pid=product_id: (eliminar_favorito(pid), actualizar_favoritos())).pack(side="left")
-
-    actualizar_favoritos()
-
 def interfaz_principal():
     init_db()
     init_favoritos_db()
-    root = tk.Tk()
+
+    root = tb.Window(themename="cosmo")
     root.title("Buscador de Ofertas - MercadoLibre")
     root.geometry("500x150")
     root.resizable(False, False)
 
-    style = ttk.Style()
-    style.theme_use('clam')
-
-    style.configure("Favorito.TButton",
-                    foreground="black",
-                    background="#cce6ff",
-                    borderwidth=1,
-                    focusthickness=3,
-                    focuscolor="none",
-                    relief="solid")
-
-    style.map("Favorito.TButton",
-              background=[('disabled', '#cce6ff'), ('active', '#b3d9ff')],
-              foreground=[('disabled', 'black'), ('active', 'black')],
-              relief=[('disabled', 'solid')],
-              bordercolor=[('disabled', '#999')])
-
-    main_frame = ttk.Frame(root, padding=20)
+    main_frame = tb.Frame(root, padding=20)
     main_frame.pack(fill="both", expand=True)
 
-    ttk.Label(main_frame, text="Nombre del producto:", font=("Arial", 12)).pack(pady=(0, 5))
-    entry = ttk.Entry(main_frame, width=40, font=("Arial", 11))
+    tb.Label(main_frame, text="Nombre del producto:", font=("Arial", 12)).pack(pady=(0, 5))
+    entry = tb.Entry(main_frame, width=40, font=("Arial", 11))
     entry.pack(pady=(0, 10))
     entry.focus()
 
-    button_frame = ttk.Frame(main_frame)
+    button_frame = tb.Frame(main_frame)
     button_frame.pack()
 
-    boton_buscar = ttk.Button(button_frame, text="Buscar", command=lambda: buscar_y_mostrar(entry, boton_buscar, frame_resultados, root))
+    boton_buscar = tb.Button(button_frame, text="Buscar", command=lambda: buscar_y_mostrar(entry, boton_buscar, frame_resultados, root), bootstyle="primary")
     boton_buscar.pack(side="left", padx=5)
 
-    boton_favoritos = ttk.Button(button_frame, text="Ver favoritos", command=ver_favoritos)
+    boton_favoritos = tb.Button(button_frame, text="Ver favoritos", command=ver_favoritos, bootstyle="secondary")
     boton_favoritos.pack(side="left", padx=5)
 
-    frame_resultados = ttk.Frame(main_frame)
+    frame_resultados = tb.Frame(main_frame)
     frame_resultados.pack(fill="both", expand=True, pady=(10, 0))
 
     root.bind('<Return>', lambda event: buscar_y_mostrar(entry, boton_buscar, frame_resultados, root))
