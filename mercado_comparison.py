@@ -38,7 +38,7 @@ def guardar_precio(product_id, titulo, precio):
     conn = sqlite3.connect(DB_NAME)
     c = conn.cursor()
     c.execute("""
-        SELECT precio FROM historial_precios
+        SELECT precio, fecha FROM historial_precios
         WHERE product_id = ?
         ORDER BY fecha DESC LIMIT 1
     """, (product_id,))
@@ -52,7 +52,7 @@ def guardar_precio(product_id, titulo, precio):
     conn.commit()
     conn.close()
 
-    return row[0] if row else None
+    return row if row else None
 
 def extraer_id_desde_url(url):
     match = re.search(r"(ML[A-Z]?\d{9,})", url)
@@ -108,7 +108,7 @@ def buscar_publicaciones(consulta, max_paginas=5):
             link = link_tag["href"] if link_tag else ""
             product_id = extraer_id_desde_url(link).strip()
             if not product_id:
-                continue  
+                continue
 
             img_url = obtener_url_imagen(item)
 
@@ -137,7 +137,7 @@ def mostrar_top3_en_root(publicaciones, frame_resultados, root):
         root.geometry("500x150")
         return
 
-    root.geometry("500x650")
+    root.geometry("500x680")
 
     try:
         resample_filter = Image.Resampling.LANCZOS
@@ -157,8 +157,8 @@ def mostrar_top3_en_root(publicaciones, frame_resultados, root):
     favoritos_ids = {f[0] for f in obtener_favoritos()}
 
     for pub in top3:
-        frame = ttk.Frame(frame_resultados, padding=10, relief="ridge")
-        frame.pack(fill="x", pady=5)
+        frame = ttk.Frame(frame_resultados, padding=10, relief="groove", style="Publicacion.TFrame")
+        frame.pack(fill="x", pady=6)
 
         img_data = None
         if pub["img_url"]:
@@ -177,41 +177,30 @@ def mostrar_top3_en_root(publicaciones, frame_resultados, root):
             img_label.image = photo
             img_label.grid(row=0, column=0, rowspan=4, padx=5, pady=5)
 
-        ttk.Label(frame, text=pub["titulo"], wraplength=250, font=("Arial", 10, "bold")).grid(row=0, column=1, sticky="w")
-        ttk.Label(frame, text=f"Precio actual: ${pub['precio']}", font=("Arial", 10)).grid(row=1, column=1, sticky="w")
+        ttk.Label(frame, text=pub["titulo"], wraplength=250, font=("Segoe UI", 10, "bold")).grid(row=0, column=1, sticky="w")
+        ttk.Label(frame, text=f"Precio actual: ${pub['precio']}", font=("Segoe UI", 10)).grid(row=1, column=1, sticky="w")
 
-        precio_anterior = guardar_precio(pub["product_id"], pub["titulo"], pub["precio"])
-        if precio_anterior is not None:
+        info = guardar_precio(pub["product_id"], pub["titulo"], pub["precio"])
+        if info is not None:
+            precio_anterior, fecha = info
             if pub['precio'] < precio_anterior:
                 comparacion = f"🔻 Bajó (Antes: ${precio_anterior})"
             elif pub['precio'] > precio_anterior:
                 comparacion = f"🔺 Subió (Antes: ${precio_anterior})"
             else:
                 comparacion = "➖ Igual que antes"
+            ttk.Label(frame, text=f"{comparacion}\nÚltima actualización: {fecha[:10]}", font=("Segoe UI", 9, "italic"), foreground="gray").grid(row=2, column=1, sticky="w")
         else:
-            comparacion = "🆕 Nuevo"
-
-        ttk.Label(frame, text=comparacion, font=("Arial", 9, "italic"), foreground="gray").grid(row=2, column=1, sticky="w")
-
-        ttk.Button(frame, text="Ver en MercadoLibre", command=lambda url=pub["link"]: webbrowser.open(url)).grid(row=3, column=1, sticky="w", pady=(5, 0))
+            ttk.Label(frame, text="🆕 Nuevo", font=("Segoe UI", 9, "italic"), foreground="gray").grid(row=2, column=1, sticky="w")
 
         boton_frame = ttk.Frame(frame)
         boton_frame.grid(row=3, column=1, sticky="w", pady=(5, 0))
 
-        btn_ver = ttk.Button(
-            boton_frame, 
-            text="Ver en MercadoLibre", 
-            command=lambda url=pub["link"]: webbrowser.open(url),
-            width=20
-        )
+        btn_ver = ttk.Button(boton_frame, text="Ver en MercadoLibre", command=lambda url=pub["link"]: webbrowser.open(url), width=20)
         btn_ver.grid(row=0, column=0, padx=(0, 10))
 
         btn_text = tk.StringVar()
-        favorito_btn = ttk.Button(
-            boton_frame, 
-            textvariable=btn_text,
-            width=20
-        )
+        favorito_btn = ttk.Button(boton_frame, textvariable=btn_text, width=20)
         favorito_btn.grid(row=0, column=1)
 
         if pub["product_id"] in favoritos_ids:
@@ -252,22 +241,32 @@ def buscar_y_mostrar(entry, boton, frame_resultados, root):
 def ver_favoritos():
     favoritos = obtener_favoritos()
     if not favoritos:
-        messagebox.showinfo("Favoritos", "No tenés productos en favoritos todavía.")
+        messagebox.showinfo("Favoritos", "No tenés productos en favoritos.")
         return
 
     ventana = tk.Toplevel()
     ventana.title("Favoritos")
-    ventana.geometry("600x500")
+    ventana.geometry("520x500")
+    ventana.resizable(False, True)
 
-    canvas = tk.Canvas(ventana)
-    scrollbar = ttk.Scrollbar(ventana, orient="vertical", command=canvas.yview)
-    contenedor = ttk.Frame(canvas)
+    contenedor_canvas = ttk.Frame(ventana)
+    contenedor_canvas.pack(fill="both", expand=True)
 
-    contenedor.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
-    canvas.create_window((0, 0), window=contenedor, anchor="nw")
+    canvas = tk.Canvas(contenedor_canvas, width=520)
+    scrollbar = ttk.Scrollbar(contenedor_canvas, orient="vertical", command=canvas.yview)
     canvas.configure(yscrollcommand=scrollbar.set)
-    canvas.pack(side="left", fill="both", expand=True)
+
     scrollbar.pack(side="right", fill="y")
+    canvas.pack(side="left", fill="both", expand=True)
+
+    marco_scroll = ttk.Frame(canvas)
+    canvas.create_window((0, 0), window=marco_scroll, anchor="nw")
+
+    def on_mousewheel(event):
+        canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+
+    marco_scroll.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
+    canvas.bind_all("<MouseWheel>", on_mousewheel)
 
     try:
         resample_filter = Image.Resampling.LANCZOS
@@ -275,7 +274,7 @@ def ver_favoritos():
         resample_filter = Image.ANTIALIAS
 
     def actualizar_favoritos():
-        for widget in contenedor.winfo_children():
+        for widget in marco_scroll.winfo_children():
             widget.destroy()
 
         nuevos = obtener_favoritos()
@@ -287,7 +286,7 @@ def ver_favoritos():
         for fav in nuevos:
             product_id, titulo, precio, link, img_url = fav
 
-            frame = ttk.Frame(contenedor, padding=5, relief="groove")
+            frame = ttk.Frame(marco_scroll, padding=5, relief="groove")
             frame.pack(fill="x", pady=5)
 
             contenido_frame = ttk.Frame(frame)
@@ -311,13 +310,16 @@ def ver_favoritos():
             detalles_frame = ttk.Frame(contenido_frame)
             detalles_frame.pack(side="left", fill="x", expand=True)
 
-            ttk.Label(detalles_frame, text=titulo, wraplength=400, font=("Arial", 10, "bold")).pack(anchor="w")
+            ttk.Label(detalles_frame, text=titulo, wraplength=370, font=("Arial", 10, "bold")).pack(anchor="w")
             ttk.Label(detalles_frame, text=f"Precio: ${precio}", font=("Arial", 10)).pack(anchor="w")
-            ttk.Button(detalles_frame, text="Ver en MercadoLibre", command=lambda url=link: webbrowser.open(url)).pack(anchor="w", pady=(2, 4))
-            ttk.Button(detalles_frame, text="Eliminar", command=lambda pid=product_id: (eliminar_favorito(pid), actualizar_favoritos())).pack(anchor="w")
+
+            botones_frame = ttk.Frame(detalles_frame)
+            botones_frame.pack(anchor="w", pady=(4, 0))
+
+            ttk.Button(botones_frame, text="Ver en MercadoLibre", command=lambda url=link: webbrowser.open(url)).pack(side="left", padx=(0, 8))
+            ttk.Button(botones_frame, text="Eliminar", command=lambda pid=product_id: (eliminar_favorito(pid), actualizar_favoritos())).pack(side="left")
 
     actualizar_favoritos()
-
 
 def interfaz_principal():
     init_db()
