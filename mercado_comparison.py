@@ -8,9 +8,10 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from bs4 import BeautifulSoup
 from PIL import Image, ImageTk, ImageSequence
+from chatbot import responder_pregunta
+import webbrowser
 import io
 import requests
-import webbrowser
 import threading
 import time
 import sqlite3
@@ -18,7 +19,10 @@ import re
 import os
 from datetime import datetime
 from favoritos import init_favoritos_db, agregar_a_favoritos, obtener_favoritos, eliminar_favorito
+from dotenv import load_dotenv
 
+load_dotenv()
+API_KEY = os.getenv("API_KEY")
 DB_NAME = "precios.db"
 
 def init_db():
@@ -72,6 +76,81 @@ def obtener_url_imagen(item):
             if "pixel" not in url.lower() and "blank" not in url.lower():
                 return url.replace("http://", "https://")
     return ""
+
+def abrir_chatbot():
+    import ttkbootstrap as tb
+    import webbrowser
+
+    ventana = tb.Toplevel()
+    ventana.title("Asistente de precios 🤖")
+    ventana.geometry("420x350")
+    ventana.resizable(False, False)
+
+    tb.Label(ventana, text="Consultale algo como:", font=("Segoe UI", 9, "italic")).pack(pady=(10, 0))
+    ejemplo = tb.Label(ventana, text="¿Bajó el precio del Galaxy S23?", foreground="gray")
+    ejemplo.pack()
+
+    chat_frame = tb.Frame(ventana)
+    chat_frame.pack(fill="both", expand=True, padx=10, pady=(10, 0))
+
+    texto_chat = tb.Text(chat_frame, height=10, wrap="word", state="disabled")
+    texto_chat.pack(fill="both", expand=True)
+
+    input_frame = tb.Frame(ventana)
+    input_frame.pack(fill="x", padx=10, pady=(10, 10))
+
+    entrada = tb.Entry(input_frame, width=40)
+    entrada.pack(side="left", fill="x", expand=True)
+
+    def enviar():
+        pregunta = entrada.get().strip()
+        if not pregunta:
+            return
+
+        respuesta = responder_pregunta(pregunta, API_KEY)
+
+        texto_chat.config(state="normal")
+        texto_chat.insert("end", f"🧑‍💻 {pregunta}\n", "user")
+
+        if "http" in respuesta:
+            partes = respuesta.split("http", 1)
+            descripcion = partes[0].strip()
+            url = "http" + partes[1].strip()
+
+            texto_chat.insert("end", f"🤖 {descripcion}\n")
+
+            # Insertar "🔗 Ver más" y hacer clickeable
+            start_idx = texto_chat.index("end")
+            texto_chat.insert("end", "\n🔗 Ver más\n\n")
+            end_idx = texto_chat.index("end - 1c")
+
+            texto_chat.tag_add("link", start_idx, end_idx)
+            texto_chat.tag_config("link", foreground="blue", underline=True, font=("Segoe UI", 10, "bold"))
+            texto_chat.tag_bind("link", "<Button-1>", lambda e, url=url: webbrowser.open_new_tab(url))
+            texto_chat.tag_bind("link", "<Enter>", lambda e: texto_chat.config(cursor="hand2"))
+            texto_chat.tag_bind("link", "<Leave>", lambda e: texto_chat.config(cursor=""))
+
+        else:
+            texto_chat.insert("end", f"🤖 {respuesta}\n\n")
+
+        texto_chat.config(state="disabled")
+        texto_chat.see("end")
+        entrada.delete(0, "end")
+
+    btn_enviar = tb.Button(input_frame, text="Enviar", command=enviar, bootstyle="primary")
+    btn_enviar.pack(side="left", padx=(5, 0))
+
+    ventana.bind("<Return>", lambda e: enviar())
+    entrada.focus()
+
+    texto_chat.tag_config("user", foreground="#222", font=("Segoe UI", 10, "bold"))
+    texto_chat.tag_config("bot", foreground="#444", font=("Segoe UI", 10))
+    texto_chat.tag_config("link", foreground="blue", underline=True)
+
+    texto_chat.tag_bind("link", "<Button-1>", lambda e: webbrowser.open_new_tab(texto_chat.get("current linestart", "current lineend").strip()))
+    texto_chat.tag_bind("link", "<Enter>", lambda e: texto_chat.config(cursor="hand2"))
+    texto_chat.tag_bind("link", "<Leave>", lambda e: texto_chat.config(cursor=""))
+
 
 def buscar_publicaciones(consulta, max_paginas=5):
     consulta = consulta.replace(" ", "-")
@@ -379,8 +458,15 @@ def interfaz_principal():
     main_frame.pack(fill="both", expand=True)
 
     tb.Label(main_frame, text="Producto:", font=("Arial",12)).pack(pady=(0,5))
-    entry = tb.Entry(main_frame, width=40, font=("Arial",11))
-    entry.pack(pady=(0,10))
+    entry_frame = tb.Frame(main_frame)
+    entry_frame.pack(pady=(0, 10))
+
+    entry = tb.Entry(entry_frame, width=37, font=("Arial", 11))
+    entry.pack(side="left")
+
+    btn_chat = tb.Button(entry_frame, text="?", width=3, command=abrir_chatbot, bootstyle=SECONDARY)
+    btn_chat.pack(side="left", padx=(5, 0))
+
     entry.focus()
 
     button_frame = tb.Frame(main_frame)

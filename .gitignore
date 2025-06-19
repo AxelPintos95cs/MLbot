@@ -1,0 +1,31 @@
+# Ignora el archivo de variables de entorno
+.env
+
+# Ignora carpetas y archivos de compilación de Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Ignora archivos temporales de editores
+*.swp
+*.swo
+*.bak
+*.tmp
+*~
+
+# VSCode 
+.vscode/
+
+# Archivos de log 
+*.log
+
+# Entornos virtuales
+venv/
+.env/
+ENV/
+env/
+.venv/
+
+# Windows
+Thumbs.db
+desktop.ini
