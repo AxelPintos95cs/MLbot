@@ -1,5 +1,5 @@
-import ttkbootstrap as tb 
-from ttkbootstrap.constants import *
+import ttkbootstrap as tb
+from ttkbootstrap.constants import PRIMARY, SECONDARY, SUCCESS, DANGER, WARNING, LIGHT
 from tkinter import messagebox
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
@@ -7,7 +7,7 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from bs4 import BeautifulSoup
-from PIL import Image, ImageTk
+from PIL import Image, ImageTk, ImageSequence
 import io
 import requests
 import webbrowser
@@ -15,6 +15,7 @@ import threading
 import time
 import sqlite3
 import re
+import os
 from datetime import datetime
 from favoritos import init_favoritos_db, agregar_a_favoritos, obtener_favoritos, eliminar_favorito
 
@@ -158,7 +159,7 @@ def mostrar_top3_en_root(publicaciones, frame_resultados, root):
     favoritos_ids = {f[0] for f in obtener_favoritos()}
 
     for pub in top3:
-        frame = tb.Frame(frame_resultados, padding=10, bootstyle="light")
+        frame = tb.Frame(frame_resultados, padding=10, bootstyle=LIGHT)
         frame.configure(style="Custom.TFrame")
         frame.pack(fill="x", pady=6)
         frame["borderwidth"] = 1
@@ -200,11 +201,11 @@ def mostrar_top3_en_root(publicaciones, frame_resultados, root):
         boton_frame = tb.Frame(frame)
         boton_frame.grid(row=3, column=1, sticky="w", pady=(5, 0))
 
-        btn_ver = tb.Button(boton_frame, text="Ver en MercadoLibre", command=lambda url=pub["link"]: webbrowser.open(url), width=20, bootstyle="warning")
+        btn_ver = tb.Button(boton_frame, text="Ver en MercadoLibre", command=lambda url=pub["link"]: webbrowser.open(url), width=20, bootstyle=WARNING)
         btn_ver.grid(row=0, column=0, padx=(0, 10))
 
         btn_text = tb.StringVar()
-        favorito_btn = tb.Button(boton_frame, textvariable=btn_text, width=20, bootstyle="success")
+        favorito_btn = tb.Button(boton_frame, textvariable=btn_text, width=20, bootstyle=SUCCESS)
         favorito_btn.grid(row=0, column=1)
 
         if pub["product_id"] in favoritos_ids:
@@ -265,7 +266,7 @@ def ver_favoritos():
     contenido.bind("<Configure>", ajustar_scroll_region)
 
     for product_id, titulo, precio, link, img_url in favoritos:
-        card = tb.Frame(contenido, padding=10, bootstyle="light")
+        card = tb.Frame(contenido, padding=10, bootstyle=LIGHT)
         card.configure(style="Custom.TFrame")
         card.pack(fill="x", pady=6)
         card["borderwidth"] = 1
@@ -288,59 +289,117 @@ def ver_favoritos():
         btn_frame = tb.Frame(card)
         btn_frame.grid(row=2, column=1, sticky="w", pady=5)
 
-        tb.Button(btn_frame, text="Ver en MercadoLibre", command=lambda url=link: webbrowser.open(url), bootstyle="warning").pack(side="left", padx=(0, 10))
-        tb.Button(btn_frame, text="Eliminar", command=lambda pid=product_id, c=card: eliminar_fav(pid, c), bootstyle="danger").pack(side="left")
+        tb.Button(btn_frame, text="Ver en MercadoLibre", command=lambda url=link: webbrowser.open(url), bootstyle=WARNING).pack(side="left", padx=(0, 10))
+        tb.Button(btn_frame, text="Eliminar", command=lambda pid=product_id, c=card: eliminar_fav(pid, c), bootstyle=DANGER).pack(side="left")
 
     def eliminar_fav(pid, frame_card):
         eliminar_favorito(pid)
         frame_card.destroy()
-        ventana.after(100, ajustar_scroll_region)  # Reajustar scroll después de eliminar
+        ventana.after(100, ajustar_scroll_region) 
 
-def buscar_y_mostrar(entry, boton, frame_resultados, root):
-    producto = entry.get().strip()
-    if not producto:
-        messagebox.showwarning("Atención", "Por favor ingresá un nombre de producto.")
+def cargar_gif_gatito(parent_frame):
+    gif = "cat_loader_small.gif"
+    if not os.path.exists(gif):
+        return None, []
+
+    im = Image.open(gif)
+    w, h = im.size
+    half_size = (w//2, h//2)
+
+    frames = []
+    for f in ImageSequence.Iterator(im):
+        frame = f.convert("RGBA").resize(half_size, Image.Resampling.LANCZOS)
+        frames.append(ImageTk.PhotoImage(frame))
+
+    label = tb.Label(parent_frame, image="", background=None)
+    label.place(x=0, y=100)
+    label.animando = False
+    label.lower()
+
+    return label, frames
+
+def animar_gif(label, frames, speed=30):
+    def loop(i=0):
+        if not getattr(label, "animando", False):
+            return
+        label.config(image=frames[i])
+        label.image = frames[i]
+        label.after(speed, lambda: loop((i+1) % len(frames)))
+    loop()
+
+def mover_gatito(label, width, duration=23000):
+    steps = 50
+    delay = duration // steps
+    dx = (width - 40) / steps
+    label.animando = True
+    label.lift()
+    def step(i=0):
+        if i > steps or not label.animando:
+            label.place_forget()
+            return
+        x = int(dx * i)
+        label.place(x=x, y=100)
+        label.after(delay, lambda: step(i+1))
+    step()
+
+def buscar_y_mostrar(entry, boton, frame_resultados, root, cat_label, cat_frames):
+    prod = entry.get().strip()
+    if not prod:
+        messagebox.showwarning("Atención", "Ingresá un nombre.")
         return
+
     boton.config(state="disabled")
     entry.config(state="disabled")
-    def tarea():
-        publicaciones = buscar_publicaciones(producto)
-        publicaciones_filtradas = filtrar_por_palabras_clave(publicaciones, producto)
-        mostrar_top3_en_root(publicaciones_filtradas, frame_resultados, root)
+
+    cat_label.animando = True
+    cat_label.place(x=0, y=85)
+    animar_gif(cat_label, cat_frames, speed=10)
+    mover_gatito(cat_label, width=main_frame.winfo_width(), duration=23000)
+
+    def task():
+        pubs = buscar_publicaciones(prod)
+        pubs = filtrar_por_palabras_clave(pubs, prod)
+        mostrar_top3_en_root(pubs, frame_resultados, root)
+        cat_label.animando = False
         boton.config(state="normal")
         entry.config(state="normal")
-    threading.Thread(target=tarea).start()
+
+    threading.Thread(target=task).start()
 
 def interfaz_principal():
     init_db()
     init_favoritos_db()
-
     root = tb.Window(themename="cosmo")
-    root.title("Buscador de Ofertas - MercadoLibre")
-    root.geometry("500x150")
+    root.title("Buscador de Ofertas")
+    root.geometry("500x160")
     root.resizable(False, False)
 
+    global main_frame
     main_frame = tb.Frame(root, padding=20)
     main_frame.pack(fill="both", expand=True)
 
-    tb.Label(main_frame, text="Nombre del producto:", font=("Arial", 12)).pack(pady=(0, 5))
-    entry = tb.Entry(main_frame, width=40, font=("Arial", 11))
-    entry.pack(pady=(0, 10))
+    tb.Label(main_frame, text="Producto:", font=("Arial",12)).pack(pady=(0,5))
+    entry = tb.Entry(main_frame, width=40, font=("Arial",11))
+    entry.pack(pady=(0,10))
     entry.focus()
 
     button_frame = tb.Frame(main_frame)
     button_frame.pack()
 
-    boton_buscar = tb.Button(button_frame, text="Buscar", command=lambda: buscar_y_mostrar(entry, boton_buscar, frame_resultados, root), bootstyle="primary")
-    boton_buscar.pack(side="left", padx=5)
-
-    boton_favoritos = tb.Button(button_frame, text="Ver favoritos", command=ver_favoritos, bootstyle="secondary")
-    boton_favoritos.pack(side="left", padx=5)
-
     frame_resultados = tb.Frame(main_frame)
-    frame_resultados.pack(fill="both", expand=True, pady=(10, 0))
+    frame_resultados.pack(fill="both", expand=True, pady=(55,0))
 
-    root.bind('<Return>', lambda event: buscar_y_mostrar(entry, boton_buscar, frame_resultados, root))
+    cat_label, cat_frames = cargar_gif_gatito(main_frame)
+
+    btn_buscar = tb.Button(button_frame, text="Buscar",
+        command=lambda: buscar_y_mostrar(entry, btn_buscar, frame_resultados, root, cat_label, cat_frames),
+        bootstyle=PRIMARY)
+    btn_buscar.pack(side="left", padx=5)
+
+    btn_favs = tb.Button(button_frame, text="Ver favoritos", command=ver_favoritos, bootstyle=SECONDARY)
+    btn_favs.pack(side="left", padx=5)
+
+    root.bind("<Return>", lambda e: buscar_y_mostrar(entry, btn_buscar, frame_resultados, root, cat_label, cat_frames))
     root.mainloop()
 
 if __name__ == "__main__":
